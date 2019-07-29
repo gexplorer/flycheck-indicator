@@ -1,6 +1,7 @@
 ;;; flycheck-indicator.el --- A fancy mode line indicator for `flycheck-mode'
 
 ;; Author: Eder Elorriaga <gexplorer8@gmail.com>
+;; Version: 1.0
 ;; Keywords: flycheck, mode-line
 
 ;; This program is free software; you can redistribute it and/or modify
