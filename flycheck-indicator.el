@@ -1,8 +1,10 @@
 ;;; flycheck-indicator.el --- A fancy mode line indicator for `flycheck-mode'
 
 ;; Author: Eder Elorriaga <gexplorer8@gmail.com>
+;; URL: https://github.com/gexplorer/flycheck-indicator
+;; Keywords: convenience language tools
 ;; Version: 1.0
-;; Keywords: flycheck, mode-line
+;; Package-Requires: ((flycheck "0.15"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -109,7 +111,7 @@
 (defun flycheck-indicator--status-formatter (status)
   "Get a colorized text for STATUS."
   (let ((status-icon (symbol-name status))
-        (status-face (alist-get status flycheck-indicator-status-faces)))
+        (status-face (cdr (assoc status flycheck-indicator-status-faces))))
     (list
      " ["
      (propertize (format "%s" status-icon)
@@ -170,5 +172,5 @@ Otherwise behave as if called interactively."
     (setq flycheck-mode-line flycheck-indicator-old-mode-line)
     (setq flycheck-indicator-old-mode-line nil))))
 
-(provide 'flycheck-indicator-mode)
+(provide 'flycheck-indicator)
 ;;; flycheck-indicator.el ends here
