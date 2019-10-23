@@ -1,5 +1,7 @@
 # flycheck-indicator
 
+[![MELPA](https://melpa.org/packages/flycheck-indicator-badge.svg)](https://melpa.org/#/flycheck-indicator)
+
 An Emacs minor-mode to get a fancy mode line indicator
 for [Flycheck](https://github.com/flycheck/flycheck).
 
