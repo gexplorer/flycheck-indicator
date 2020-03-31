@@ -3,7 +3,7 @@
 ;; Author: Eder Elorriaga <gexplorer8@gmail.com>
 ;; URL: https://github.com/gexplorer/flycheck-indicator
 ;; Keywords: convenience language tools
-;; Version: 1.0
+;; Version: 1.1
 ;; Package-Requires: ((flycheck "0.15"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -85,6 +85,29 @@
   :group 'flycheck-indicator
   :type 'character)
 
+(defcustom flycheck-indicator-status-icons nil
+  "The characters used for status icons."
+  :group 'flycheck-indicator
+  :type '(alist :key-type (choice
+                           (const :tag "Not checked" not-checked)
+                           (const :tag "No checker" no-checker)
+                           (const :tag "Running" running)
+                           (const :tag "Errored" errored)
+                           (const :tag "Finished" finished)
+                           (const :tag "Interrupted" interrupted)
+                           (const :tag "Suspicious" suspicious))
+                :value-type string)
+  :package-version '(flycheck-indicator-mode . "1.1"))
+
+(defvar flycheck-indicator-status-help
+  '((not-checked . "The current buffer was not checked.")
+    (no-checker . "Automatic syntax checker selection did not find a suitable syntax checker.")
+    (running . "A syntax check is now running in the current buffer.")
+    (errored . "The current syntax check has errored.")
+    (finished . "The current syntax check was finished normally.")
+    (interrupted . "The current syntax check was interrupted.")
+    (suspicious . "The last syntax check had a suspicious result.")))
+
 (defvar flycheck-indicator-status-faces
   '((not-checked . flycheck-indicator-disabled)
     (no-checker . flycheck-indicator-disabled)
@@ -97,53 +120,63 @@
 (defvar flycheck-indicator-old-mode-line nil
   "The former value of `flycheck-mode-line'.")
 
-(defvar flycheck-indicator-mode-line
-  '(:eval
-    (let-alist (flycheck-count-errors flycheck-current-errors)
-      (let* ((status flycheck-last-status-change)
-             (info (or .info 0))
-             (warnings (or .warning 0))
-             (errors (or .error 0)))
-        (flycheck-indicator--formatter info warnings errors status))))
+(defvar flycheck-indicator--mode-line
+  '(:eval (flycheck-indicator--mode-line))
   "The fancy value of `flycheck-mode-line'.")
 
+(defun flycheck-indicator--mode-line ()
+  "The fancy formatter of `flycheck-mode-line'."
+  (let-alist (flycheck-count-errors flycheck-current-errors)
+    (let* ((status flycheck-last-status-change)
+           (info (or .info 0))
+           (warnings (or .warning 0))
+           (errors (or .error 0)))
+      (flycheck-indicator--formatter info warnings errors status))))
+
 ;;; Utility functions
-(defun flycheck-indicator--status-formatter (status)
-  "Get a colorized text for STATUS."
-  (let ((status-icon (symbol-name status))
-        (status-face (cdr (assoc status flycheck-indicator-status-faces))))
-    (list
-     " ["
-     (propertize (format "%s" status-icon)
-                 'font-lock-face status-face)
-     "]")))
-
-(defun flycheck-indicator--errors-formatter (info warnings errors)
-  "Get a colorized text for INFO, WARNINGS and ERRORS."
-  `(
-    " ["
-    ,@(if (> info 0)
-          (list (propertize (format "%c%s" flycheck-indicator-icon-info info)
-                            'font-lock-face 'flycheck-indicator-info)))
-    ,@(if (> warnings 0)
-          (list
-           (if (> info 0) " " "")
-           (propertize (format "%c%s" flycheck-indicator-icon-warning warnings)
-                       'font-lock-face 'flycheck-indicator-warning)))
-    ,@(if (> errors 0)
-          (list
-           (if (> (+ info warnings) 0) " " "")
-           (propertize (format "%c%s" flycheck-indicator-icon-error errors)
-                       'font-lock-face 'flycheck-indicator-error)))
-    "]"))
-
 (defun flycheck-indicator--formatter (info warnings errors status)
   "Get a colorized text for STATUS with INFO WARNINGS and ERRORS."
   (if (or (not (equal status 'finished))
           (= 0 (+ info warnings errors)))
       (flycheck-indicator--status-formatter status)
-    (flycheck-indicator--errors-formatter info warnings errors)
-    ))
+    (flycheck-indicator--icons-formatter info warnings errors)))
+
+(defun flycheck-indicator--status-formatter (status)
+  "Get a colorized text for STATUS."
+  (let ((icon (alist-get status flycheck-indicator-status-icons (symbol-name status)))
+        (help-message (alist-get status flycheck-indicator-status-help))
+        (face (alist-get status flycheck-indicator-status-faces)))
+    (propertize
+     (format " %s" icon)
+     'font-lock-face face
+     'help-echo (concat help-message "\nmouse-1: Check Show the error list for the current buffer.")
+     'local-map (let ((map (make-sparse-keymap)))
+                  (define-key map [mode-line mouse-1]
+                    'flycheck-list-errors)
+                  map)
+     'mouse-face 'mode-line-highlight)))
+
+(defun flycheck-indicator--icons-formatter (info warnings errors)
+  "Get colorized icons for INFO WARNINGS and ERRORS."
+  (propertize (concat
+               (when (> info 0)
+                 (propertize (format " %c%s" flycheck-indicator-icon-info info)
+                             'font-lock-face 'flycheck-indicator-info))
+               (when (> warnings 0)
+                 (propertize (format " %c%s" flycheck-indicator-icon-warning warnings)
+                             'font-lock-face 'flycheck-indicator-warning))
+               (when (> errors 0)
+                 (propertize (format " %c%s" flycheck-indicator-icon-error errors)
+                             'font-lock-face 'flycheck-indicator-error)))
+              'help-echo (concat (when (> errors 0) (format "%s errors\n" errors))
+                                 (when (> warnings 0) (format "%s warnings\n" warnings))
+                                 (when (> info 0) (format "%s infos\n" info))
+                                 "mouse-1: Check whether Flycheck can be used in this buffer.")
+              'local-map (let ((map (make-sparse-keymap)))
+                           (define-key map [mode-line mouse-1]
+                             'flycheck-verify-setup)
+                           map)
+              'mouse-face 'mode-line-highlight))
 
 ;;;###autoload
 (define-minor-mode flycheck-indicator-mode
@@ -164,11 +197,11 @@ Otherwise behave as if called interactively."
   :global t
   (cond
    ((and flycheck-indicator-mode
-         (not (eq flycheck-mode-line flycheck-indicator-mode-line)))
+         (not (eq flycheck-mode-line flycheck-indicator--mode-line)))
     (setq flycheck-indicator-old-mode-line flycheck-mode-line)
-    (setq flycheck-mode-line flycheck-indicator-mode-line))
+    (setq flycheck-mode-line flycheck-indicator--mode-line))
    ((and (not flycheck-indicator-mode)
-         (eq flycheck-mode-line flycheck-indicator-mode-line))
+         (eq flycheck-mode-line flycheck-indicator--mode-line))
     (setq flycheck-mode-line flycheck-indicator-old-mode-line)
     (setq flycheck-indicator-old-mode-line nil))))
 
